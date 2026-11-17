@@ -1,84 +1,46 @@
-# VPN на Xray: Trojan + REALITY
+# infra-tools
 
-Скрипты рассчитаны на Ubuntu/Debian с systemd и публичным IPv4-адресом.
-Команды выполняются на VPN-сервере от root.
-Для установки используй `create_vpn_server.sh`.
+Установка Xray (Trojan + REALITY) на Ubuntu/Debian с systemd, интернетом и публичным IPv4.
+Скрипт сам устанавливает Xray и зависимости. Команды ниже выполняются на сервере;
+если вошёл как root, убери `sudo`.
 
-## Создание сервера
+## Установка
 
 ```bash
+sudo apt-get update && sudo apt-get install -y git util-linux
+git clone https://github.com/Sitleman/infra-tools.git
+cd infra-tools
 sudo bash create_vpn_server.sh Client1
 ```
 
-Скрипт устанавливает зависимости через apt и, если Xray отсутствует, запускает
-[официальный установщик Xray](https://github.com/XTLS/Xray-install).
-Установленный Xray автоматически не обновляется. Сервис `xray` должен читать
-`/usr/local/etc/xray/config.json`; конфигурации через `-confdir` не поддерживаются.
+`git` нужен для скачивания, `util-linux` — для команды `flock`, требуемой до запуска установки.
+Открой входящий TCP 443 в firewall сервера и панели хостинга.
+Если UFW уже включён: `sudo ufw allow 443/tcp`.
 
-По умолчанию используются TCP 443 и SNI `www.samsung.com`. Разреши входящий TCP 443
-в firewall сервера и панели хостинга. Если UFW уже включён:
+Импортируй выведенную ссылку или QR-код в клиент с поддержкой Trojan + REALITY.
+Для всего устройства включи VPN/TUN. Ссылка и QR-код дают доступ к серверу — не публикуй их.
 
-```bash
-sudo ufw allow 443/tcp
-```
-
-Скрипт выводит ссылку и QR-код первого пользователя. Импортируй их в клиент
-с поддержкой Trojan + REALITY; для всего устройства включи режим VPN/TUN.
-Домен SNI должен быть доступен с сервера и поддерживать TLS 1.3.
-
-Настройки можно передать при запуске:
-
-```bash
-sudo env VPN_SERVER_ADDRESS=vpn.example.com VPN_PORT=8443 VPN_SNI=www.samsung.com \
-  bash create_vpn_server.sh Client1
-```
-
-`VPN_SERVER_ADDRESS` — публичный IPv4-адрес или домен самого VPN-сервера,
-`VPN_SNI` — домен сайта для REALITY. Без `VPN_SERVER_ADDRESS` публичный IPv4
-определяется через `api.ipify.org`. IPv6-адреса в этих скриптах не поддерживаются.
-При изменении порта разреши соответствующий TCP-порт в firewall.
-
-Повторный запуск останавливается перед существующим непустым конфигом, сохраняя
-ключи и пользователей. Пустой файл и `{}` допускаются для первоначальной настройки.
-
-## Добавление пользователей
+## Добавление пользователя
 
 ```bash
 sudo bash add_vpn_user.sh ivan
-sudo bash add_vpn_user.sh anna
 ```
 
-Каждый запуск создаёт отдельный пароль и выводит ссылку и QR-код. Имена состоят
-из 1–64 латинских букв, цифр, `_` и `-`; повторное имя отклоняется.
-Если при создании задавался `VPN_SERVER_ADDRESS`, передавай тот же адрес:
+Имя должно быть уникальным: 1–64 латинских букв, цифр, `_` или `-`.
+Скрипт выдаст новую ссылку и QR-код; перезапуск Xray кратковременно прервёт соединения.
+
+## Настройки
+
+По умолчанию: порт `443`, SNI `www.samsung.com`, IPv4 определяется через `api.ipify.org`.
+Другие значения можно передать при установке:
 
 ```bash
-sudo env VPN_SERVER_ADDRESS=vpn.example.com bash add_vpn_user.sh ivan
+sudo env VPN_SERVER_ADDRESS=vpn.example.com VPN_PORT=8443 VPN_SNI=www.samsung.com bash create_vpn_server.sh Client1
 ```
 
-Скрипт читает порт, SNI, ключ и short ID из текущего конфига. Поддерживается
-ровно один Trojan + REALITY inbound с транспортом TCP/RAW
-и списком пользователей `clients` или `users`. Прежние пользователи и
-остальные настройки сохраняются.
+Для своего порта открой соответствующий TCP-порт. SNI должен поддерживать TLS 1.3 и быть доступен с сервера.
+Если задавал `VPN_SERVER_ADDRESS`, передавай его и при добавлении пользователей:
+`sudo env VPN_SERVER_ADDRESS=vpn.example.com bash add_vpn_user.sh ivan`. IPv6 не поддерживается.
 
-Оба скрипта проверяют конфиг перед применением, используют общую блокировку
-и восстанавливают прежний конфиг при ошибке запуска сервиса. Добавление пользователя
-перезапускает Xray и кратковременно прерывает активные соединения.
-Ссылки и QR-коды дают доступ к серверу; передавай их только соответствующему пользователю.
-
-## Диагностика
-
-```bash
-sudo systemctl status xray --no-pager
-sudo journalctl -u xray -n 50 --no-pager
-sudo ss -lntp 'sport = :443'
-```
-
-## Проверка скриптов
-
-```bash
-bash -n create_vpn_server.sh add_vpn_user.sh
-```
-
-Команда проверяет синтаксис Bash без запуска скриптов.
-Реальный запуск Xray и подключение клиента проверяются отдельно на Linux-сервере.
+Существующий непустой конфиг `/usr/local/etc/xray/config.json` установщик не перезаписывает.
+Уже установленный Xray автоматически не обновляется. Логи: `sudo journalctl -u xray -n 50 --no-pager`.
